@@ -26,6 +26,13 @@ jobs:
           test -f payload/integration/install_into_px4.py
           test -f payload/overlay/src/modules/l1_quad/L1Quad.cpp
 
+      - name: Apply NuttX compatibility fixes
+        run: |
+          set -euxo pipefail
+          sed -i 's/#include <cfloat>/#include <float.h>/' \
+            payload/overlay/src/modules/l1_quad/L1QuadMath.hpp
+          grep -n '#include <float.h>' payload/overlay/src/modules/l1_quad/L1QuadMath.hpp
+
       - name: Clone official PX4 v1.17.0
         run: |
           set -euxo pipefail
