@@ -2,7 +2,7 @@ name: Build PX4 v1.17 L1Quad Pixhawk 6C Mini
 
 on:
   push:
-    branches: [ l1quad-integration ]
+    branches: [ main, l1quad-integration ]
   workflow_dispatch:
 
 permissions:
