@@ -26,12 +26,32 @@ jobs:
           test -f payload/integration/install_into_px4.py
           test -f payload/overlay/src/modules/l1_quad/L1Quad.cpp
 
-      - name: Apply NuttX compatibility fixes
+      - name: Apply NuttX and PX4 matrix compatibility fixes
         run: |
           set -euxo pipefail
           sed -i 's/#include <cfloat>/#include <float.h>/' \
             payload/overlay/src/modules/l1_quad/L1QuadMath.hpp
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('payload/overlay/src/modules/l1_quad/L1AdaptiveController.cpp')
+          text = path.read_text()
+          replacements = {
+              'state.rotation.col(2).dot(phi_v)':
+                  'matrix::Vector3f{state.rotation(0, 2), state.rotation(1, 2), state.rotation(2, 2)}.dot(phi_v)',
+              'state.rotation.col(0).dot(phi_v)':
+                  'matrix::Vector3f{state.rotation(0, 0), state.rotation(1, 0), state.rotation(2, 0)}.dot(phi_v)',
+              'state.rotation.col(1).dot(phi_v)':
+                  'matrix::Vector3f{state.rotation(0, 1), state.rotation(1, 1), state.rotation(2, 1)}.dot(phi_v)',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'expected expression not found: {old}')
+              text = text.replace(old, new)
+          path.write_text(text)
+          PY
           grep -n '#include <float.h>' payload/overlay/src/modules/l1_quad/L1QuadMath.hpp
+          grep -n 'Vector3f{state.rotation' payload/overlay/src/modules/l1_quad/L1AdaptiveController.cpp
 
       - name: Clone official PX4 v1.17.0
         run: |
