@@ -26,11 +26,12 @@ jobs:
           test -f payload/integration/install_into_px4.py
           test -f payload/overlay/src/modules/l1_quad/L1Quad.cpp
 
-      - name: Apply NuttX and PX4 matrix compatibility fixes
+      - name: Apply NuttX and PX4 compatibility fixes
         run: |
           set -euxo pipefail
           sed -i 's/#include <cfloat>/#include <float.h>/' \
             payload/overlay/src/modules/l1_quad/L1QuadMath.hpp
+
           python3 - <<'PY'
           from pathlib import Path
 
@@ -50,8 +51,15 @@ jobs:
               text = text.replace(old, new)
           path.write_text(text)
           PY
+
+          mv payload/overlay/src/modules/l1_quad/l1_quad_params.c \
+             payload/overlay/src/modules/l1_quad/l1_quad_params.cpp
+          sed -i 's/l1_quad_params\.c/l1_quad_params.cpp/' \
+            payload/overlay/src/modules/l1_quad/CMakeLists.txt
+
           grep -n '#include <float.h>' payload/overlay/src/modules/l1_quad/L1QuadMath.hpp
           grep -n 'Vector3f{state.rotation' payload/overlay/src/modules/l1_quad/L1AdaptiveController.cpp
+          grep -n 'l1_quad_params.cpp' payload/overlay/src/modules/l1_quad/CMakeLists.txt
 
       - name: Clone official PX4 v1.17.0
         run: |
