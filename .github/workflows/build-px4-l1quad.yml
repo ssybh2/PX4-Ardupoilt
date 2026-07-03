@@ -1,0 +1,70 @@
+name: Build PX4 v1.17 L1Quad Pixhawk 6C Mini
+
+on:
+  push:
+    branches: [ l1quad-integration ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-firmware:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout integration repository
+        uses: actions/checkout@v4
+
+      - name: Extract L1Quad integration payload
+        run: |
+          set -euxo pipefail
+          rm -rf payload
+          cat integration/payload.b64.part* | base64 -d > /tmp/l1quad_px4_payload.zip
+          echo '04fb306f5ffe7bf0036d550d59d92730732b5854984131f49779ab27aaea0235  /tmp/l1quad_px4_payload.zip' | sha256sum -c -
+          unzip -q /tmp/l1quad_px4_payload.zip
+          test -f payload/integration/install_into_px4.py
+          test -f payload/overlay/src/modules/l1_quad/L1Quad.cpp
+
+      - name: Clone official PX4 v1.17.0
+        run: |
+          set -euxo pipefail
+          git clone --branch v1.17.0 --depth 1 --recursive --shallow-submodules \
+            https://github.com/PX4/PX4-Autopilot.git PX4-Autopilot
+          git -C PX4-Autopilot describe --tags --always
+
+      - name: Install PX4-native L1Quad module
+        run: |
+          set -euxo pipefail
+          python3 payload/integration/install_into_px4.py "$GITHUB_WORKSPACE/PX4-Autopilot"
+          grep -n 'CONFIG_MODULES_L1_QUAD=y' PX4-Autopilot/boards/px4/fmu-v6c/default.px4board
+          grep -n 'l1_quad start' PX4-Autopilot/ROMFS/px4fmu_common/init.d/rc.mc_apps
+
+      - name: Build px4_fmu-v6c_default
+        run: |
+          set -euxo pipefail
+          IMAGE='px4io/px4-dev:v1.16.0-rc1-258-g0369abd556'
+          docker pull "$IMAGE"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/PX4-Autopilot:/work/PX4-Autopilot" \
+            -w /work/PX4-Autopilot \
+            "$IMAGE" \
+            bash -lc 'git config --global --add safe.directory /work/PX4-Autopilot && make px4_fmu-v6c_default -j2'
+
+      - name: Collect firmware and checksums
+        run: |
+          set -euxo pipefail
+          SRC='PX4-Autopilot/build/px4_fmu-v6c_default/px4_fmu-v6c_default.px4'
+          test -s "$SRC"
+          mkdir -p firmware
+          cp "$SRC" firmware/PX4-v1.17.0-L1Quad-Pixhawk6C-Mini.px4
+          sha256sum firmware/PX4-v1.17.0-L1Quad-Pixhawk6C-Mini.px4 > firmware/SHA256SUMS.txt
+          ls -lh firmware
+
+      - name: Upload flashable firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: PX4-v1.17.0-L1Quad-Pixhawk6C-Mini
+          path: firmware/
+          if-no-files-found: error
+          retention-days: 30
